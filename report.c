@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 
 typedef struct {
@@ -12,13 +13,15 @@ typedef struct {
   int count;
 } word;
 
-#define HASH_SIZE 1000000
+#define HASH_SIZE 524288
 
 word wordsInFirstHalf[HASH_SIZE];
 word wordsInSecondHalf[HASH_SIZE];
 
 word *sortedWordPtrsInFirstHalf[HASH_SIZE];
 word *sortedWordPtrsInSecondHalf[HASH_SIZE];
+
+// int HASH_CONFLICT_COUNT = 0;
 
 char *countWordInFirstHalf(char *start); //前半部分をカウント、後半の最初のアドレスを返す
 char *countWordInSecondHalf(char *start); //後半部分をカウント
@@ -43,6 +46,10 @@ void printMostFiveWords(word **sortedWordPtrs) {
 // 888  888  888 888  888 888 888  888
 // 888  888  888 "Y888888 888 888  888
 int main() {
+  struct timeval precount;
+  struct timeval postcount;
+  struct timeval postsort;
+
   int i;
   for(i = 0; i < HASH_SIZE; i++) {
     wordsInFirstHalf[i].beginPtr = NULL;
@@ -56,15 +63,30 @@ int main() {
   filesize = lseek(0, 0, SEEK_END);
   pagesize = getpagesize();
   mmapsize = (filesize + (pagesize - 1)) / pagesize * pagesize;
-  addr = (char *)mmap(0, mmapsize, PROT_READ, MAP_PRIVATE, 0, 0);
+  addr = (char *)mmap(0, mmapsize, PROT_READ | PROT_WRITE, MAP_PRIVATE, 0, 0);
 
+  for(i = 0; i < filesize; i++) {
+    if(addr[i] >= 'a' && addr[i] < 'a' + 26) {
+      addr[i] += 'A' - 'a';
+    }
+  }
+
+
+  gettimeofday(&precount, NULL);
   countWordInSecondHalf(countWordInFirstHalf(addr));
+
+  gettimeofday(&postcount, NULL);
 
   sortWords(wordsInFirstHalf, sortedWordPtrsInFirstHalf, HASH_SIZE);
   sortWords(wordsInSecondHalf, sortedWordPtrsInSecondHalf, HASH_SIZE);
 
+  gettimeofday(&postsort, NULL);
   printMostFiveWords(sortedWordPtrsInFirstHalf);
   printMostFiveWords(sortedWordPtrsInSecondHalf);
+
+  // printf("hash conflict occurred %d times.\n", HASH_CONFLICT_COUNT);
+  printf("count spend %ld useconds.\n", postcount.tv_usec - precount.tv_usec);
+  printf("sort spend %ld useconds.\n", postsort.tv_usec - postcount.tv_usec);
 
   return 0;
 }
@@ -84,11 +106,11 @@ int hash(char *begin, char *end)
 
     int i;
     for (i = 0; i < L; i++) {
-      char c = begin[i];
-      if(c >= 'A') {
-        c += 'a' - 'A';
-      }
-      h = h * 37 + c;
+      // char c = begin[i];
+      // if(c >= 'a') {
+      //   c += 'A' - 'a';
+      // }
+      h = h * 37 + begin[i];
     }
     return abs(h) % HASH_SIZE;
 }
@@ -152,6 +174,7 @@ void registerWordInFirstHalf(char *begin, char *end) {
       return;
     }
 
+    // HASH_CONFLICT_COUNT++;
     h++;
   }
 }
@@ -211,6 +234,7 @@ void registerWordInSecondHalf(char *begin, char *end) {
           return;
         }
 
+        // HASH_CONFLICT_COUNT++;
         h_secondHalf++;
       }
     }
@@ -223,6 +247,7 @@ void registerWordInSecondHalf(char *begin, char *end) {
       return;
     }
 
+    // HASH_CONFLICT_COUNT++;
     h_firstHalf++;
   }
 }
