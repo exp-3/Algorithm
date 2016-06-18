@@ -12,7 +12,7 @@ typedef struct {
   int count;
 } word;
 
-#define HASH_SIZE 1000000
+#define HASH_SIZE 524288
 
 word wordsInFirstHalf[HASH_SIZE];
 word wordsInSecondHalf[HASH_SIZE];
@@ -85,16 +85,18 @@ int hash(char *begin, char *end)
     int i;
     for (i = 0; i < L; i++) {
       char c = begin[i];
-      if(c >= 'A') {
-        c += 'a' - 'A';
-      }
+      // if(c >= 'A') {
+      //   c += 'a' - 'A';
+      // }
+      c |= 0x20; //'A' - 'a' = 0x20
       h = h * 37 + c;
     }
     return abs(h) % HASH_SIZE;
 }
 
 int isAlphabet(char c) {
-  return (c >= 'a' && c < 'a' + 26) || (c >= 'A' && c < 'A' + 26);
+  c |= 0x20;
+  return (c >= 'a' && c < 'a' + 26);
 }
 int isValidCharactor(char c) {
   return isAlphabet(c) || c == '\'' || c == '-';
@@ -120,7 +122,7 @@ void parseWord(char *start, char **end) { //startから続く単語の終わり�
 int isTheSameWord(char *begin1, char *end1, char *begin2, char *end2) {
   int i;
   for(i = 0; i < end1 - begin1; i++) {
-    if(begin1[i] != begin2[i]) {
+    if((begin1[i] ^ begin2[i]) & ~0x20) {
       return 0;
     }
   }
