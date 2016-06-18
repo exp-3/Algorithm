@@ -85,9 +85,6 @@ int hash(char *begin, char *end)
     int i;
     for (i = 0; i < L; i++) {
       char c = begin[i];
-      // if(c >= 'A') {
-      //   c += 'a' - 'A';
-      // }
       c |= 0x20; //'A' - 'a' = 0x20
       h = h * 37 + c;
     }
@@ -98,6 +95,7 @@ int isAlphabet(char c) {
   c |= 0x20;
   return (c >= 'a' && c < 'a' + 26);
 }
+
 int isValidCharactor(char c) {
   return isAlphabet(c) || c == '\'' || c == '-';
 }
