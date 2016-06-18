@@ -13,7 +13,7 @@ typedef struct {
   int count;
 } word;
 
-#define HASH_SIZE 524288
+#define HASH_SIZE 262144
 
 word wordsInFirstHalf[HASH_SIZE];
 word wordsInSecondHalf[HASH_SIZE];
@@ -21,7 +21,9 @@ word wordsInSecondHalf[HASH_SIZE];
 word *sortedWordPtrsInFirstHalf[HASH_SIZE];
 word *sortedWordPtrsInSecondHalf[HASH_SIZE];
 
-// int HASH_CONFLICT_COUNT = 0;
+int HASH_CONFLICT_COUNT = 0;
+int WORD_NUM = 0;
+int MAX_CONFLICT_COUNT = 0;
 
 char *countWordInFirstHalf(char *start); //前半部分をカウント、後半の最初のアドレスを返す
 char *countWordInSecondHalf(char *start); //後半部分をカウント
@@ -63,14 +65,7 @@ int main() {
   filesize = lseek(0, 0, SEEK_END);
   pagesize = getpagesize();
   mmapsize = (filesize + (pagesize - 1)) / pagesize * pagesize;
-  addr = (char *)mmap(0, mmapsize, PROT_READ | PROT_WRITE, MAP_PRIVATE, 0, 0);
-
-  for(i = 0; i < filesize; i++) {
-    if(addr[i] >= 'a' && addr[i] < 'a' + 26) {
-      addr[i] += 'A' - 'a';
-    }
-  }
-
+  addr = (char *)mmap(0, mmapsize, PROT_READ, MAP_PRIVATE, 0, 0);
 
   gettimeofday(&precount, NULL);
   countWordInSecondHalf(countWordInFirstHalf(addr));
@@ -84,7 +79,11 @@ int main() {
   printMostFiveWords(sortedWordPtrsInFirstHalf);
   printMostFiveWords(sortedWordPtrsInSecondHalf);
 
-  // printf("hash conflict occurred %d times.\n", HASH_CONFLICT_COUNT);
+  printf("\n==========================\n");
+  printf("hash conflict occurred %d times.\n", HASH_CONFLICT_COUNT);
+  printf("word scanned totally %d times.\n", WORD_NUM);
+  printf("average conflict count is %lf.\n", (double)HASH_CONFLICT_COUNT / WORD_NUM);
+  printf("max conflict count is %d.\n", MAX_CONFLICT_COUNT);
   printf("count spend %ld useconds.\n", postcount.tv_usec - precount.tv_usec);
   printf("sort spend %ld useconds.\n", postsort.tv_usec - postcount.tv_usec);
 
@@ -106,18 +105,18 @@ int hash(char *begin, char *end)
 
     int i;
     for (i = 0; i < L; i++) {
-      // char c = begin[i];
-      // if(c >= 'a') {
-      //   c += 'A' - 'a';
-      // }
-      h = h * 37 + begin[i];
+      char c = begin[i];
+      c |= 0x20; //'A' - 'a' = 0x20
+      h = h * 37 + c;
     }
     return abs(h) % HASH_SIZE;
 }
 
 int isAlphabet(char c) {
-  return (c >= 'a' && c < 'a' + 26) || (c >= 'A' && c < 'A' + 26);
+  c |= 0x20;
+  return (c >= 'a' && c < 'a' + 26);
 }
+
 int isValidCharactor(char c) {
   return isAlphabet(c) || c == '\'' || c == '-';
 }
@@ -142,7 +141,7 @@ void parseWord(char *start, char **end) { //startから続く単語の終わり�
 int isTheSameWord(char *begin1, char *end1, char *begin2, char *end2) {
   int i;
   for(i = 0; i < end1 - begin1; i++) {
-    if(begin1[i] != begin2[i]) {
+    if((begin1[i] ^ begin2[i]) & ~0x20) {
       return 0;
     }
   }
@@ -160,21 +159,29 @@ int isTheSameWord(char *begin1, char *end1, char *begin2, char *end2) {
 // 888    888 888      88888P'  "Y888      888  888 "Y888888 888 888
 void registerWordInFirstHalf(char *begin, char *end) {
   int h = hash(begin, end);
+  int conflictCount = 0;
   while(1) {
     if(wordsInFirstHalf[h].beginPtr == NULL && wordsInFirstHalf[h].endPtr == NULL) {
       wordsInFirstHalf[h].beginPtr = begin;
       wordsInFirstHalf[h].endPtr = end;
       wordsInFirstHalf[h].count = 1;
+      if(MAX_CONFLICT_COUNT < conflictCount) {
+        MAX_CONFLICT_COUNT = conflictCount;
+      }
       return;
     }
 
     if(isTheSameWord(wordsInFirstHalf[h].beginPtr, wordsInFirstHalf[h].endPtr,
                      begin, end)) {
       wordsInFirstHalf[h].count++;
+      if(MAX_CONFLICT_COUNT < conflictCount) {
+        MAX_CONFLICT_COUNT = conflictCount;
+      }
       return;
     }
 
-    // HASH_CONFLICT_COUNT++;
+    conflictCount++;
+    HASH_CONFLICT_COUNT++;
     h++;
   }
 }
@@ -185,6 +192,7 @@ char *countWordInFirstHalf(char *start) {
 
   while(1) {
     if(isAlphabet(*begin)) {
+      WORD_NUM++;
       parseWord(begin, &end);
       registerWordInFirstHalf(begin, end);
       begin = end;
@@ -208,6 +216,7 @@ char *countWordInFirstHalf(char *start) {
 //      X88 Y8b.     Y88b.   Y88..88P 888  888 Y88b 888      888  888 888  888 888 888
 //  88888P'  "Y8888   "Y8888P "Y88P"  888  888  "Y88888      888  888 "Y888888 888 888
 void registerWordInSecondHalf(char *begin, char *end) {
+  int conflictCount = 0;
   int h_firstHalf, h_secondHalf;
   h_firstHalf = h_secondHalf = hash(begin, end);
   while(1) {
@@ -222,6 +231,9 @@ void registerWordInSecondHalf(char *begin, char *end) {
           wordsInSecondHalf[h_secondHalf].endPtr = end;
           wordsInSecondHalf[h_secondHalf].count = 1;
 
+          if(MAX_CONFLICT_COUNT < conflictCount) {
+            MAX_CONFLICT_COUNT = conflictCount;
+          }
           return;
         }
 
@@ -231,10 +243,14 @@ void registerWordInSecondHalf(char *begin, char *end) {
                          begin, end)) {
           wordsInSecondHalf[h_secondHalf].count++;
 
+          if(MAX_CONFLICT_COUNT < conflictCount) {
+            MAX_CONFLICT_COUNT = conflictCount;
+          }
           return;
         }
 
-        // HASH_CONFLICT_COUNT++;
+        HASH_CONFLICT_COUNT++;
+        conflictCount++;
         h_secondHalf++;
       }
     }
@@ -244,10 +260,15 @@ void registerWordInSecondHalf(char *begin, char *end) {
                      wordsInFirstHalf[h_firstHalf].endPtr,
                      begin, end)) {
       wordsInFirstHalf[h_firstHalf].count = 0;
+
+      if(MAX_CONFLICT_COUNT < conflictCount) {
+        MAX_CONFLICT_COUNT = conflictCount;
+      }
       return;
     }
 
-    // HASH_CONFLICT_COUNT++;
+    HASH_CONFLICT_COUNT++;
+    conflictCount++;
     h_firstHalf++;
   }
 }
@@ -258,6 +279,7 @@ char *countWordInSecondHalf(char *start) {
 
   while(1) {
     if(isAlphabet(*begin)) {
+      WORD_NUM++;
       parseWord(begin , &end);
       registerWordInSecondHalf(begin, end);
       begin = end;
