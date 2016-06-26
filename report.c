@@ -28,6 +28,7 @@ void sortWords(word *words, word **result, int size);
 void printMostFiveWords(word **sortedWordPtrs) {
   int i, j;
   for(i = 0; i < 5; i++) {
+    printf("%d. ", i + 1);
     for(j = 0; j < sortedWordPtrs[i]->endPtr - sortedWordPtrs[i]->beginPtr; j++) {
       putchar(sortedWordPtrs[i]->beginPtr[j]);
     }
@@ -43,6 +44,7 @@ void printMostFiveWords(word **sortedWordPtrs) {
 // 888  888  888 888  888 888 888  888
 // 888  888  888 "Y888888 888 888  888
 int main() {
+  // 初期化
   int i;
   for(i = 0; i < HASH_SIZE; i++) {
     wordsInFirstHalf[i].beginPtr = NULL;
@@ -58,12 +60,18 @@ int main() {
   mmapsize = (filesize + (pagesize - 1)) / pagesize * pagesize;
   addr = (char *)mmap(0, mmapsize, PROT_READ, MAP_PRIVATE, 0, 0);
 
+  // 単語の数え上げ
   countWordInSecondHalf(countWordInFirstHalf(addr));
 
+  // 上位5単語の割り出し
   sortWords(wordsInFirstHalf, sortedWordPtrsInFirstHalf, HASH_SIZE);
   sortWords(wordsInSecondHalf, sortedWordPtrsInSecondHalf, HASH_SIZE);
 
+  // 結果表示
+  printf("==== before @-mark ====\n");
   printMostFiveWords(sortedWordPtrsInFirstHalf);
+
+  printf("\n==== after @-mark ====\n");
   printMostFiveWords(sortedWordPtrsInSecondHalf);
 
   return 0;
@@ -117,6 +125,7 @@ void parseWord(char *start, char **end) { //startから続く単語の終わり�
 }
 
 int isTheSameWord(char *begin1, char *end1, char *begin2, char *end2) {
+  (void)end2; //end2は使わないためvoidキャストする
   int i;
   for(i = 0; i < end1 - begin1; i++) {
     if((begin1[i] ^ begin2[i]) & ~0x20) { // もし6bit目以外で違いが存在したら
