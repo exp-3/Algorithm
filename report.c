@@ -13,13 +13,13 @@ typedef struct {
   int count;
 } word;
 
-#define HASH_SIZE 262144
+#define HASH_SIZE 1048576
 
 word wordsInFirstHalf[HASH_SIZE];
 word wordsInSecondHalf[HASH_SIZE];
 
-word *sortedWordPtrsInFirstHalf[HASH_SIZE];
-word *sortedWordPtrsInSecondHalf[HASH_SIZE];
+word *sortedWordPtrsInFirstHalf[5];
+word *sortedWordPtrsInSecondHalf[5];
 
 int HASH_CONFLICT_COUNT = 0;
 int WORD_NUM = 0;
@@ -98,27 +98,26 @@ int main() {
 // 888  888 888    888 888
 // Y88b 888 Y88b.  888 888
 //  "Y88888  "Y888 888 888
-int hash(char *begin, char *end)
-{
-    int h = 0;
+int hash(char *begin, char *end) {
+    long h = 0;
     int L = end - begin;
 
     int i;
     for (i = 0; i < L; i++) {
       char c = begin[i];
-      c |= 0x20; //'A' - 'a' = 0x20
+      c |= 0x20; //'a' - 'A' = 0x20なので、強制的に大文字を小文字に変換
       h = h * 37 + c;
     }
     return abs(h) % HASH_SIZE;
 }
 
 int isAlphabet(char c) {
-  c |= 0x20;
+  c |= 0x20; // 'a' - 'A' = 0x20なので、強制的に大文字を小文字に変換
   return (c >= 'a' && c < 'a' + 26);
 }
 
 int isValidCharactor(char c) {
-  return isAlphabet(c) || c == '\'' || c == '-';
+  return isAlphabet(c) || c == '\'' || c == '-' || (c >= '0' && c <= '9');
 }
 
 void parseWord(char *start, char **end) { //startから続く単語の終わりを探し、その次のアドレスを格納して返す
@@ -141,7 +140,7 @@ void parseWord(char *start, char **end) { //startから続く単語の終わり�
 int isTheSameWord(char *begin1, char *end1, char *begin2, char *end2) {
   int i;
   for(i = 0; i < end1 - begin1; i++) {
-    if((begin1[i] ^ begin2[i]) & ~0x20) {
+    if((begin1[i] ^ begin2[i]) & ~0x20) { // もし6bit目以外で違いが存在したら
       return 0;
     }
   }
@@ -183,6 +182,7 @@ void registerWordInFirstHalf(char *begin, char *end) {
     conflictCount++;
     HASH_CONFLICT_COUNT++;
     h++;
+    h %= HASH_SIZE; // もしhashのサイズを超えたら
   }
 }
 
@@ -252,6 +252,7 @@ void registerWordInSecondHalf(char *begin, char *end) {
         HASH_CONFLICT_COUNT++;
         conflictCount++;
         h_secondHalf++;
+        h_secondHalf %= HASH_SIZE; // もしhashのサイズを超えたら
       }
     }
 
@@ -270,6 +271,7 @@ void registerWordInSecondHalf(char *begin, char *end) {
     HASH_CONFLICT_COUNT++;
     conflictCount++;
     h_firstHalf++;
+    h_firstHalf %= HASH_SIZE; // もしhashのサイズを超えたら
   }
 }
 
@@ -294,24 +296,45 @@ char *countWordInSecondHalf(char *start) {
   }
 }
 
+//                           888
+//                           888
+//                           888
+// .d8888b   .d88b.  888d888 888888
+// 88K      d88""88b 888P"   888
+// "Y8888b. 888  888 888     888
+//      X88 Y88..88P 888     Y88b.
+//  88888P'  "Y88P"  888      "Y888
+
 void sortWords(word *words, word **result, int size) {
-  int min = 0;
-  int num = 0; //要素数
+  int min = 0; // 暫定5位の出現数
+  int num = 0; // 要素数. nullポインタのメンバ変数を参照しようとするのを避けるため.
   int i, j, index;
   for(i = 0; i < size; i++) {
     if(words[i].count > min) {
       index = 0;
+      // words[i]の出現数が暫定何番目となるのかを0番目の要素から順に比較して調べる。
       while(index < num && words[i].count <= result[index]->count) {
+        // index < num としているのは、まだresultに4個以下の要素しか登録されていない場合に
+        // result[num以上の値]->countとしてしまうと、null->countとなってしまい、
+        // nullへの参照が起きてエラーとなることを避けるため。
+        // words[i]の出現数の方が大きくなったら抜ける
         index++;
       }
 
+      // 末尾の要素から順に順位を一つ下にずらしていく
       for(j = 4; j > index; j--) {
         result[j] = result[j - 1];
       }
+
+      // index番目の後釜にwords[i]を据える
       result[index] = &words[i];
+
+      // resultがもしまだ5個要素を持っていなかったら、要素数を増やす
       if(num < 5) {
         num++;
       }
+
+      // 暫定5位の出現数を更新する
       min = result[num - 1]->count;
     }
   }
